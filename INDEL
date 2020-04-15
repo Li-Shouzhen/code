@@ -1,0 +1,87 @@
+bwa index RHO1.fa
+bwa aln -t 4 RHO1.fa RHO1_1.fq > aln_sa1.sai
+bwa aln -t 4 RHO1.fa RHO1_2.fq > aln_sa2.sai
+bwa sampe [opnions] RHO1.fa aln_sa1.sai aln_sa2.sai RHO1_1.fq RHO1_2.fq >aln_pe.sam
+
+perl ./code/CIGAR_in_SAM.pl 625 aln_pe.sam result.txt
+
+perl ~/Seq/code/CIGAR_get_read.pl 625 aln_pe.sam reads_209.txt 209
+
+#!/usr/bin/perl
+
+# this script is used to analyse CIGAR in sam file format to get INDEL
+$infile=$ARGV[1];
+$outfile = $ARGV[2];
+$tag=$ARGV[3];
+$length = $ARGV[0];
+open (in, "<$infile");
+undef %DEL;
+undef %INSERT;
+open(out, ">$outfile");
+#for($i=1;$i<=$length;$i++){$DEL{$i}=0;$INSERT{$i}=0;}
+while($line = <in>){
+    if (!($line=~/^\@/)) {
+      chomp $line;
+      @data = split /\t/, $line;
+      $CIGAR = $data[5];
+      $start = $data[3];
+      $_=$CIGAR;
+      while((/(\d+)(\D)/g)){
+        if($2 eq 'M'){$start += $1;}
+        if($2 eq 'I'){
+            if ($start == $tag){
+            print out $line;
+            print out "\n";
+            }
+        }
+        if($2 eq 'D'){
+            for($i=0;$i<$1;$i++) {
+                if (($start + $i) == $tag){
+                    print out $line;
+                    print out "\n";
+            }
+        }
+            $start += $1
+      }
+    }
+  }
+}
+  close in;
+
+close out;
+
+
+#!/usr/bin/perl
+
+# this script is used to analyse CIGAR in sam file format to get INDEL
+$infile=$ARGV[1];
+$outfile = $ARGV[2];
+$length = $ARGV[0];
+open (in, "<$infile");
+undef %DEL;
+undef %INSERT;
+for($i=1;$i<=$length;$i++){$DEL{$i}=0;$INSERT{$i}=0;}
+while($line = <in>){
+    if (!($line=~/^\@/)) {
+      chomp $line;
+      @data = split /\t/, $line;
+      $CIGAR = $data[5];
+      $start = $data[3];
+      $_=$CIGAR;
+      while((/(\d+)(\D)/g)){
+        if($2 eq 'M'){$start += $1;}
+        if($2 eq 'I'){$INSERT{$start} += $1;}
+        if($2 eq 'D'){for($i=0;$i<$1;$i++) {$DEL{$start+$i}+=1;}$start += $1;}
+      }
+    }
+  }
+  close in;
+
+open(out, ">$outfile.insert.txt");
+print out "$_\t$INSERT{$_}\n" for keys %INSERT;
+close out;
+system "sort -n -k1 $outfile.insert.txt -o $outfile.insert.txt";
+open(out, ">$outfile.delete.txt");
+print out "$_ \t$DEL{$_}\n" for keys %DEL;
+close out;
+system "sort -n -k1 $outfile.delete.txt -o $outfile.delete.txt";
